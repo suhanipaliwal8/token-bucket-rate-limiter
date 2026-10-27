@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 
 from app.schemas import CheckRequest, CheckResponse
 from app.store import InMemoryBucketStore
@@ -13,8 +13,10 @@ def health():
 
 
 @app.post("/check", response_model=CheckResponse)
-def check(body: CheckRequest):
+def check(body: CheckRequest, response: Response):
     decision = store.check(body.client_key)
+    if not decision.allowed:
+        response.status_code = status.HTTP_429_TOO_MANY_REQUESTS
     return CheckResponse(
         decision="ALLOW" if decision.allowed else "DENY",
         remaining=decision.remaining,

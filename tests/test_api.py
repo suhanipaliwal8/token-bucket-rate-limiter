@@ -16,7 +16,7 @@ def test_allows_until_burst_then_denies():
         assert r.status_code == 200
         assert r.json()["decision"] == "ALLOW"
     r = client.post("/check", json={"client_key": "client-a"})
-    assert r.status_code == 200
+    assert r.status_code == 429
     assert r.json()["decision"] == "DENY"
 
 
