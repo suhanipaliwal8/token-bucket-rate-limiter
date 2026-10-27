@@ -12,4 +12,14 @@ class CheckResponse(BaseModel):
     remaining: int
     retry_after: float
     reset_after: float
-    
+
+
+class ClientConfigIn(BaseModel):
+    rate: float = Field(gt=0, le=100000)
+    burst: int = Field(gt=0, le=1000000)
+
+
+class ClientConfigOut(BaseModel):
+    client_key: str
+    rate: float
+    burst: int

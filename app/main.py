@@ -1,9 +1,26 @@
-from fastapi import FastAPI, Response, status
+from contextlib import asynccontextmanager
 
-from app.schemas import CheckRequest, CheckResponse
+from fastapi import FastAPI, HTTPException, Response, status
+
+from app import client_config
+from app.db import close_db, init_db
+from app.schemas import (
+    CheckRequest,
+    CheckResponse,
+    ClientConfigIn,
+    ClientConfigOut,
+)
 from app.store import InMemoryBucketStore
 
-app = FastAPI(title="Token Bucket Rate Limiter Service")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+    close_db()
+
+
+app = FastAPI(title="Token Bucket Rate Limiter Service", lifespan=lifespan)
 store = InMemoryBucketStore()
 
 
@@ -23,3 +40,20 @@ def check(body: CheckRequest, response: Response):
         retry_after=decision.retry_after,
         reset_after=decision.reset_after,
     )
+
+
+@app.put("/admin/clients/{client_key}", response_model=ClientConfigOut)
+def set_client_config(client_key: str, body: ClientConfigIn):
+    cfg = client_config.upsert(client_key, body.rate, body.burst)
+    store.set_config(cfg)
+    return ClientConfigOut(client_key=cfg.client_key, rate=cfg.rate, burst=cfg.burst)
+
+
+@app.get("/admin/clients/{client_key}", response_model=ClientConfigOut)
+def get_client_config(client_key: str):
+    cfg = client_config.get(client_key)
+    if cfg is None:
+        raise HTTPException(
+            status_code=404, detail="No custom config; default limits apply"
+        )
+    return ClientConfigOut(client_key=cfg.client_key, rate=cfg.rate, burst=cfg.burst)

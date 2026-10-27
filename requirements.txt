@@ -2,3 +2,5 @@ pytest
 fastapi
 uvicorn
 httpx2
+psycopg[binary,pool]
+pydantic-settings
