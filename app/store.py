@@ -34,3 +34,6 @@ class InMemoryBucketStore:
         decision = consume(state, cfg.rate, cfg.burst, now)
         self._buckets[client_key] = decision.state
         return decision
+
+    def remove_config(self, client_key: str) -> None:
+        self._configs.pop(client_key, None)
