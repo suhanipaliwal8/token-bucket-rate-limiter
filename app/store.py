@@ -34,3 +34,9 @@ class InMemoryBucketStore:
         decision = consume(state, cfg.rate, cfg.burst, now)
         self._buckets[client_key] = decision.state
         return decision
+
+    def export_buckets(self) -> dict[str, BucketState]:
+        return self._buckets.copy()
+
+    def import_buckets(self, buckets: dict[str, BucketState]) -> None:
+        self._buckets.update(buckets)

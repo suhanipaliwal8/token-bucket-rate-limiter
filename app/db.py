@@ -11,6 +11,13 @@ CREATE TABLE IF NOT EXISTS client_config (
     burst      INTEGER NOT NULL CHECK (burst > 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS bucket_state (
+    client_key  TEXT PRIMARY KEY,
+    tokens      DOUBLE PRECISION NOT NULL,
+    last_refill DOUBLE PRECISION NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Response, status
 
-from app import client_config
+from app import client_config, snapshots
 from app.db import close_db, init_db
 from app.schemas import (
     CheckRequest,
@@ -16,7 +16,11 @@ from app.store import InMemoryBucketStore
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    store.import_buckets(snapshots.load_snapshot())
+    worker = snapshots.SnapshotWorker(store)
+    worker.start()
     yield
+    worker.stop()
     close_db()
 
 
