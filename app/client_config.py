@@ -33,3 +33,10 @@ def get(client_key: str) -> ClientConfig | None:
             (client_key,),
         ).fetchone()
     return ClientConfig(*row) if row else None
+
+def delete(client_key: str) -> bool:
+    with pool.connection() as conn:
+        cur = conn.execute(
+            "DELETE FROM client_config WHERE client_key = %s", (client_key,)
+        )
+        return cur.rowcount > 0
