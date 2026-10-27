@@ -40,3 +40,5 @@ class InMemoryBucketStore:
 
     def import_buckets(self, buckets: dict[str, BucketState]) -> None:
         self._buckets.update(buckets)
+    def remove_config(self, client_key: str) -> None:
+        self._configs.pop(client_key, None)

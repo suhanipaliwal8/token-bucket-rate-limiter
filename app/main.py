@@ -61,3 +61,11 @@ def get_client_config(client_key: str):
             status_code=404, detail="No custom config; default limits apply"
         )
     return ClientConfigOut(client_key=cfg.client_key, rate=cfg.rate, burst=cfg.burst)
+
+@app.delete("/admin/clients/{client_key}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_client_config(client_key: str):
+    if not client_config.delete(client_key):
+        raise HTTPException(
+            status_code=404, detail="No custom config for this client"
+        )
+    store.remove_config(client_key)

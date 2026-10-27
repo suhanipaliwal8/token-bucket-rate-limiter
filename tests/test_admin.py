@@ -25,3 +25,9 @@ def test_unknown_client_has_no_custom_config(client):
 def test_invalid_config_is_rejected(client):
     r = client.put("/admin/clients/admin-test-c", json={"rate": 5, "burst": 0})
     assert r.status_code == 422
+
+def test_delete_config(client):
+    client.put("/admin/clients/admin-test-d", json={"rate": 2, "burst": 3})
+    assert client.delete("/admin/clients/admin-test-d").status_code == 204
+    assert client.get("/admin/clients/admin-test-d").status_code == 404
+    assert client.delete("/admin/clients/admin-test-d").status_code == 404
