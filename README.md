@@ -82,6 +82,7 @@ curl -X PUT http://127.0.0.1:8000/admin/clients/demo \
 - **Wall-clock timestamps** are stored so that downtime counts as refill time after a restart.
 - **DENY is HTTP 429**; both algorithms return the same result shape and headers.
 - **Single process (v1):** locks and state are per-process, so run one uvicorn worker.
+**Idle-client eviction:** a background pass removes a client's state once it is identical to a new client's state (bucket fully refilled, or window empty), so eviction never changes a decision; striped locks avoid per-client lock objects.
 
 ## Project structure
 
@@ -155,11 +156,9 @@ I also validated the test itself: removing the per-key lock (with a widened race
 - Up to 5 seconds of state can be lost on a hard crash (graceful shutdown loses nothing)
 - Admin endpoints have no authentication
 - Single process only; multiple instances would each have their own state
-- Memory for idle clients is never released (idle-key eviction not built yet)
 - Sliding-window memory and per-request work grow with `burst`
 
 ## Roadmap
 
-- Idle-key eviction
 - Distributed mode: several limiter instances sharing state
 - Live dashboard of request and deny rates per client
