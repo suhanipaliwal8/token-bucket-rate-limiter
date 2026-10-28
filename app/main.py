@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Response, status
 
 from app import client_config, snapshots
 from app.db import close_db, init_db
+from app.errors import CostExceedsLimit
 from app.headers import rate_limit_headers
 from app.schemas import (
     CheckRequest,
@@ -37,7 +38,10 @@ def health():
 
 @app.post("/check", response_model=CheckResponse)
 def check(body: CheckRequest, response: Response):
-    result = store.check(body.client_key)
+    try:
+        result = store.check(body.client_key, body.cost)
+    except CostExceedsLimit as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     for name, value in rate_limit_headers(result).items():
         response.headers[name] = value
     if not result.allowed:

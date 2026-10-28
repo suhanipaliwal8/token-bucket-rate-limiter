@@ -53,6 +53,7 @@ Headers on every response:
 | `Retry-After` | Seconds to wait before retrying (429 responses only) |
 
 Clients without a custom config get the defaults: token bucket, 5 requests/second, burst of 10.
+An optional cost field (default 1) lets a request spend several tokens, and a cost greater than the client’s burst returns 422.
 
 ### Admin endpoints
 

@@ -7,6 +7,7 @@ from app.algorithms.sliding_window import WindowDecision, WindowState, consume_w
 from app.algorithms.token_bucket import BucketState, Decision, consume
 from app.client_config import ClientConfig
 from app.algorithms.idle import bucket_is_full, window_is_empty
+from app.errors import CostExceedsLimit
 
 DEFAULT_RATE = 5.0   # tokens per second
 DEFAULT_BURST = 10   # bucket capacity
@@ -56,14 +57,16 @@ class InMemoryBucketStore:
         with self._guard:
             self._configs.pop(client_key, None)
 
-    def check(self, client_key: str) -> CheckResult:
+    def check(self, client_key: str, cost: int = 1) -> CheckResult:
         cfg = self._get_config(client_key)
+        if cost > cfg.burst:
+            raise CostExceedsLimit(cost, cfg.burst)
         with self._key_lock(client_key):
             now = time.time()  # taken inside the lock, so time never goes backwards
             if cfg.algorithm == "sliding_window":
-                decision = self._check_window(client_key, cfg, now)
+                decision = self._check_window(client_key, cfg, now, cost)
             else:
-                decision = self._check_bucket(client_key, cfg, now)
+                decision = self._check_bucket(client_key, cfg, now, cost)
         return CheckResult(
             allowed=decision.allowed,
             limit=cfg.burst,
@@ -72,27 +75,30 @@ class InMemoryBucketStore:
             reset_after=decision.reset_after,
             reset_at=now + decision.reset_after,
         )
-    def _check_bucket(self, client_key: str, cfg: ClientConfig, now: float) -> Decision:
+
+    def _check_bucket(
+        self, client_key: str, cfg: ClientConfig, now: float, cost: int
+    ) -> Decision:
         with self._guard:
             state = self._buckets.get(client_key)
         if state is None:
             state = BucketState(tokens=cfg.burst, last_refill=now)
-        decision = consume(state, cfg.rate, cfg.burst, now)
+        decision = consume(state, cfg.rate, cfg.burst, now, cost)
         with self._guard:
             self._buckets[client_key] = decision.state
         return decision
 
     def _check_window(
-        self, client_key: str, cfg: ClientConfig, now: float
+        self, client_key: str, cfg: ClientConfig, now: float, cost: int
     ) -> WindowDecision:
         with self._guard:
             state = self._windows.get(client_key, WindowState())
         window = cfg.burst / cfg.rate  # limit = burst, window length = burst / rate
-        decision = consume_window(state, cfg.burst, window, now)
+        decision = consume_window(state, cfg.burst, window, now, cost)
         with self._guard:
             self._windows[client_key] = decision.state
         return decision
-
+    
     def export_buckets(self) -> dict[str, BucketState]:
         with self._guard:
             return self._buckets.copy()
