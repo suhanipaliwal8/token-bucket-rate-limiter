@@ -60,11 +60,34 @@ def load_window_snapshot() -> dict[str, WindowState]:
         rows = conn.execute("SELECT client_key, timestamps FROM window_state").fetchall()
     return {key: WindowState(tuple(ts)) for key, ts in rows}
 
+def delete_snapshots(bucket_keys: list[str], window_keys: list[str]) -> None:
+    with pool.connection() as conn:
+        if bucket_keys:
+            conn.execute(
+                "DELETE FROM bucket_state WHERE client_key = ANY(%s)", (bucket_keys,)
+            )
+        if window_keys:
+            conn.execute(
+                "DELETE FROM window_state WHERE client_key = ANY(%s)", (window_keys,)
+            )
+
+
+EVICT_EVERY_N_TICKS = 12  # with a 5 s interval: every 60 seconds
+
 
 class SnapshotWorker:
-    def __init__(self, store, interval: float = SNAPSHOT_INTERVAL_SECONDS) -> None:
+    """Background maintenance: saves state to PostgreSQL and evicts idle clients."""
+
+    def __init__(
+        self,
+        store,
+        interval: float = SNAPSHOT_INTERVAL_SECONDS,
+        evict_every: int = EVICT_EVERY_N_TICKS,
+    ) -> None:
         self._store = store
         self._interval = interval
+        self._evict_every = evict_every
+        self._ticks = 0
         self._stop_event = threading.Event()
         self._thread = threading.Thread(
             target=self._run, name="snapshot-worker", daemon=True
@@ -78,6 +101,15 @@ class SnapshotWorker:
         self._thread.join()
         self._save_all()  # final save on shutdown
 
+    def run_once(self) -> None:
+        self._save_all()
+        self._ticks += 1
+        if self._ticks % self._evict_every == 0:
+            buckets, windows = self._store.evict_idle()
+            delete_snapshots(buckets, windows)
+            if buckets or windows:
+                logger.info("evicted %d idle clients", len(buckets) + len(windows))
+
     def _save_all(self) -> None:
         save_snapshot(self._store.export_buckets())
         save_window_snapshot(self._store.export_windows())
@@ -86,6 +118,6 @@ class SnapshotWorker:
         # wait() returns True when stop is requested, ending the loop
         while not self._stop_event.wait(self._interval):
             try:
-                self._save_all()
+                self.run_once()
             except Exception:
-                logger.exception("snapshot failed; will retry next interval")
+                logger.exception("maintenance tick failed; will retry next interval")

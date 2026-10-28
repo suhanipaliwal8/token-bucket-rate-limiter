@@ -6,6 +6,7 @@ from app import client_config
 from app.algorithms.sliding_window import WindowDecision, WindowState, consume_window
 from app.algorithms.token_bucket import BucketState, Decision, consume
 from app.client_config import ClientConfig
+from app.algorithms.idle import bucket_is_full, window_is_empty
 
 DEFAULT_RATE = 5.0   # tokens per second
 DEFAULT_BURST = 10   # bucket capacity
@@ -107,3 +108,37 @@ class InMemoryBucketStore:
     def import_windows(self, windows: dict[str, WindowState]) -> None:
         with self._guard:
             self._windows.update(windows)
+
+    def evict_idle(self, now: float | None = None) -> tuple[list[str], list[str]]:
+        """Drop state identical to a brand-new client's state.
+
+        Returns (evicted bucket keys, evicted window keys)."""
+        now = time.time() if now is None else now
+        with self._guard:
+            bucket_items = list(self._buckets.items())
+            window_items = list(self._windows.items())
+
+        evicted_buckets: list[str] = []
+        for key, state in bucket_items:
+            cfg = self._get_config(key)  # cached; hits the database only for restored keys
+            if bucket_is_full(state, cfg.rate, cfg.burst, now):
+                with self._guard:
+                    if self._buckets.get(key) is state:  # unchanged since we looked
+                        del self._buckets[key]
+                        evicted_buckets.append(key)
+
+        evicted_windows: list[str] = []
+        for key, state in window_items:
+            cfg = self._get_config(key)
+            if window_is_empty(state, cfg.burst / cfg.rate, now):
+                with self._guard:
+                    if self._windows.get(key) is state:
+                        del self._windows[key]
+                        evicted_windows.append(key)
+
+        # forget cached configs of clients with no state left (reloaded on demand)
+        with self._guard:
+            for key in evicted_buckets + evicted_windows:
+                if key not in self._buckets and key not in self._windows:
+                    self._configs.pop(key, None)
+        return evicted_buckets, evicted_windows
