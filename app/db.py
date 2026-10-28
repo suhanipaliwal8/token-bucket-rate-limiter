@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS bucket_state (
 ALTER TABLE client_config
     ADD COLUMN IF NOT EXISTS algorithm TEXT NOT NULL DEFAULT 'token_bucket'
     CHECK (algorithm IN ('token_bucket', 'sliding_window'));
+
+CREATE TABLE IF NOT EXISTS window_state (
+    client_key TEXT PRIMARY KEY,
+    timestamps DOUBLE PRECISION[] NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

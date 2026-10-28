@@ -17,12 +17,13 @@ from app.store import InMemoryBucketStore
 async def lifespan(app: FastAPI):
     init_db()
     store.import_buckets(snapshots.load_snapshot())
+    store.import_windows(snapshots.load_window_snapshot())
     worker = snapshots.SnapshotWorker(store)
     worker.start()
     yield
     worker.stop()
     close_db()
-
+    
 
 app = FastAPI(title="Token Bucket Rate Limiter Service", lifespan=lifespan)
 store = InMemoryBucketStore()

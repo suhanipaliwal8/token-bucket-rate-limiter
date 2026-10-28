@@ -15,9 +15,10 @@ from app.main import app, store  # noqa: E402
 @pytest.fixture(scope="session")
 def client():
     with TestClient(app) as c:
-        # Start every test session from a clean slate, because startup now
-        # restores the buckets saved by the previous session.
+        # Start every test session from a clean slate, because startup
+        # restores the state saved by the previous session.
         store._buckets.clear()
+        store._windows.clear()
         with pool.connection() as conn:
-            conn.execute("TRUNCATE bucket_state")
+            conn.execute("TRUNCATE bucket_state, window_state")
         yield c

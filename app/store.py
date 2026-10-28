@@ -82,3 +82,11 @@ class InMemoryBucketStore:
     def import_buckets(self, buckets: dict[str, BucketState]) -> None:
         with self._guard:
             self._buckets.update(buckets)
+
+    def export_windows(self) -> dict[str, WindowState]:
+        with self._guard:
+            return self._windows.copy()
+
+    def import_windows(self, windows: dict[str, WindowState]) -> None:
+        with self._guard:
+            self._windows.update(windows)
