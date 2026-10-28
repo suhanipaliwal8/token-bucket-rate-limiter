@@ -10,6 +10,7 @@ A standalone HTTP service that other services call to ask: "is this client allow
 - Race-condition safe: concurrent requests for the same key can never double-spend a token
 - Standard rate-limit headers on every `/check` response
 - Load-tested at 1,500+ requests/second with automatic correctness checks
+- Live dashboard at /dashboard with per-client request and deny rates
 
 ## Architecture
 
@@ -98,6 +99,8 @@ tests/           unit, API, concurrency, and snapshot tests
 loadtest/        Locust load test with correctness checks
 ```
 
+## Dashboard
+
 ## Run it locally
 
 ```bash
@@ -158,8 +161,8 @@ I also validated the test itself: removing the per-key lock (with a widened race
 - Admin endpoints have no authentication
 - Single process only; multiple instances would each have their own state
 - Sliding-window memory and per-request work grow with `burst`
+- The dashboard and /admin/metrics have no authentication
 
 ## Roadmap
 
 - Distributed mode: several limiter instances sharing state
-- Live dashboard of request and deny rates per client
