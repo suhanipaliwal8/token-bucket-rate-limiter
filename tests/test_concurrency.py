@@ -2,7 +2,7 @@ import threading
 import time
 
 import pytest
-
+from app.algorithms import sliding_window
 from app.algorithms.token_bucket import consume as real_consume
 from app.client_config import ClientConfig
 from app.store import InMemoryBucketStore
@@ -61,3 +61,20 @@ def test_different_keys_do_not_interfere(slow_consume):
     store = make_store(keys)
     allowed = run_concurrent_checks(store, keys, threads_per_key=40)
     assert all(count == BURST for count in allowed.values())
+
+def test_sliding_window_is_not_double_spent(monkeypatch):
+    real = sliding_window.consume_window
+
+    def slow(*args, **kwargs):
+        time.sleep(0.001)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("app.store.consume_window", slow)
+
+    key = "race-window"
+    store = InMemoryBucketStore()
+    store.set_config(
+        ClientConfig(key, rate=0.001, burst=BURST, algorithm="sliding_window")
+    )
+    allowed = run_concurrent_checks(store, [key], threads_per_key=100)
+    assert allowed[key] == BURST
