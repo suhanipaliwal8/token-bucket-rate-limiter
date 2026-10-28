@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response, status
+from fastapi.responses import FileResponse
 
 from app import client_config, snapshots
 from app.db import close_db, init_db
 from app.errors import CostExceedsLimit
 from app.headers import rate_limit_headers
+from app.metrics import Metrics
 from app.schemas import (
     CheckRequest,
     CheckResponse,
@@ -29,6 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Token Bucket Rate Limiter Service", lifespan=lifespan)
 store = InMemoryBucketStore()
+metrics = Metrics()
 
 
 @app.get("/health")
@@ -42,6 +46,7 @@ def check(body: CheckRequest, response: Response):
         result = store.check(body.client_key, body.cost)
     except CostExceedsLimit as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    metrics.record(body.client_key, result.allowed)
     for name, value in rate_limit_headers(result).items():
         response.headers[name] = value
     if not result.allowed:
@@ -88,3 +93,13 @@ def delete_client_config(client_key: str):
             status_code=404, detail="No custom config for this client"
         )
     store.remove_config(client_key)
+
+
+@app.get("/admin/metrics")
+def get_metrics():
+    return metrics.snapshot()
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    return FileResponse(Path(__file__).parent / "static" / "dashboard.html")

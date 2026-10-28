@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rate limiter dashboard</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: .4rem .8rem; text-align: right; border-bottom: 1px solid #333; }
+  th:first-child, td:first-child { text-align: left; }
+  .bar { background: #333; width: 120px; height: 10px; display: inline-block; margin-left: .5rem; }
+  .bar > span { background: #e5484d; height: 10px; display: block; }
+  #status { color: #888; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<h1>Rate limiter: live traffic</h1>
+<div id="status">loading...</div>
+<table>
+  <thead><tr>
+    <th>Client</th><th>Req/s (10 s)</th><th>Denied/s (10 s)</th>
+    <th>Allowed (60 s)</th><th>Denied (60 s)</th><th>Deny rate</th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<script>
+function cell(tr, text) {
+  const td = document.createElement("td");
+  td.textContent = text;  // textContent, never innerHTML: client keys are untrusted text
+  tr.appendChild(td);
+  return td;
+}
+
+async function refresh() {
+  const status = document.getElementById("status");
+  try {
+    const res = await fetch("/admin/metrics");
+    const data = await res.json();
+    const tbody = document.getElementById("rows");
+    tbody.replaceChildren();
+    for (const c of data.clients) {
+      const tr = document.createElement("tr");
+      cell(tr, c.client_key);
+      cell(tr, c.requests_per_sec_10s);
+      cell(tr, c.denied_per_sec_10s);
+      cell(tr, c.allowed_60s);
+      cell(tr, c.denied_60s);
+      const td = cell(tr, (c.deny_rate_60s * 100).toFixed(1) + "%");
+      const bar = document.createElement("span");
+      bar.className = "bar";
+      const fill = document.createElement("span");
+      fill.style.width = (c.deny_rate_60s * 100) + "%";
+      bar.appendChild(fill);
+      td.appendChild(bar);
+      tbody.appendChild(tr);
+    }
+    status.textContent = data.tracked_clients + " clients active in the last " +
+      data.window_seconds + " s, updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    status.textContent = "cannot reach the server";
+  }
+}
+setInterval(refresh, 1000);
+refresh();
+</script>
+</body>
+</html>
