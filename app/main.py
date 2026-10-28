@@ -45,12 +45,16 @@ def check(body: CheckRequest, response: Response):
         reset_after=decision.reset_after,
     )
 
-
 @app.put("/admin/clients/{client_key}", response_model=ClientConfigOut)
 def set_client_config(client_key: str, body: ClientConfigIn):
-    cfg = client_config.upsert(client_key, body.rate, body.burst)
+    cfg = client_config.upsert(client_key, body.rate, body.burst, body.algorithm)
     store.set_config(cfg)
-    return ClientConfigOut(client_key=cfg.client_key, rate=cfg.rate, burst=cfg.burst)
+    return ClientConfigOut(
+        client_key=cfg.client_key,
+        rate=cfg.rate,
+        burst=cfg.burst,
+        algorithm=cfg.algorithm,
+    )
 
 
 @app.get("/admin/clients/{client_key}", response_model=ClientConfigOut)
@@ -60,8 +64,12 @@ def get_client_config(client_key: str):
         raise HTTPException(
             status_code=404, detail="No custom config; default limits apply"
         )
-    return ClientConfigOut(client_key=cfg.client_key, rate=cfg.rate, burst=cfg.burst)
-
+    return ClientConfigOut(
+        client_key=cfg.client_key,
+        rate=cfg.rate,
+        burst=cfg.burst,
+        algorithm=cfg.algorithm,
+    )
 @app.delete("/admin/clients/{client_key}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client_config(client_key: str):
     if not client_config.delete(client_key):

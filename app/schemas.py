@@ -17,9 +17,11 @@ class CheckResponse(BaseModel):
 class ClientConfigIn(BaseModel):
     rate: float = Field(gt=0, le=100000)
     burst: int = Field(gt=0, le=1000000)
+    algorithm: Literal["token_bucket", "sliding_window"] = "token_bucket"
 
 
 class ClientConfigOut(BaseModel):
     client_key: str
     rate: float
     burst: int
+    algorithm: str
