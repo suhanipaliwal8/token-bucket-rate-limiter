@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import threading
 import time
 
@@ -9,6 +10,14 @@ from app.client_config import ClientConfig
 DEFAULT_RATE = 5.0   # tokens per second
 DEFAULT_BURST = 10   # bucket capacity
 
+@dataclass(frozen=True)
+class CheckResult:
+    allowed: bool
+    limit: int          # max requests the client may make (burst / window limit)
+    remaining: int
+    retry_after: float  # seconds until a request would be allowed (0 if allowed)
+    reset_after: float  # seconds until the limit is fully restored
+    reset_at: float     # the same moment as a unix timestamp
 
 class InMemoryBucketStore:
     def __init__(self) -> None:
@@ -46,14 +55,22 @@ class InMemoryBucketStore:
         with self._guard:
             self._configs.pop(client_key, None)
 
-    def check(self, client_key: str) -> Decision | WindowDecision:
+    def check(self, client_key: str) -> CheckResult:
         cfg = self._get_config(client_key)
         with self._key_lock(client_key):
             now = time.time()  # taken inside the lock, so time never goes backwards
             if cfg.algorithm == "sliding_window":
-                return self._check_window(client_key, cfg, now)
-            return self._check_bucket(client_key, cfg, now)
-
+                decision = self._check_window(client_key, cfg, now)
+            else:
+                decision = self._check_bucket(client_key, cfg, now)
+        return CheckResult(
+            allowed=decision.allowed,
+            limit=cfg.burst,
+            remaining=decision.remaining,
+            retry_after=decision.retry_after,
+            reset_after=decision.reset_after,
+            reset_at=now + decision.reset_after,
+        )
     def _check_bucket(self, client_key: str, cfg: ClientConfig, now: float) -> Decision:
         with self._guard:
             state = self._buckets.get(client_key)
