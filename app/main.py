@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Response, status
 
 from app import client_config, snapshots
 from app.db import close_db, init_db
+from app.headers import rate_limit_headers
 from app.schemas import (
     CheckRequest,
     CheckResponse,
@@ -36,14 +37,16 @@ def health():
 
 @app.post("/check", response_model=CheckResponse)
 def check(body: CheckRequest, response: Response):
-    decision = store.check(body.client_key)
-    if not decision.allowed:
+    result = store.check(body.client_key)
+    for name, value in rate_limit_headers(result).items():
+        response.headers[name] = value
+    if not result.allowed:
         response.status_code = status.HTTP_429_TOO_MANY_REQUESTS
     return CheckResponse(
-        decision="ALLOW" if decision.allowed else "DENY",
-        remaining=decision.remaining,
-        retry_after=decision.retry_after,
-        reset_after=decision.reset_after,
+        decision="ALLOW" if result.allowed else "DENY",
+        remaining=result.remaining,
+        retry_after=result.retry_after,
+        reset_after=result.reset_after,
     )
 
 @app.put("/admin/clients/{client_key}", response_model=ClientConfigOut)
