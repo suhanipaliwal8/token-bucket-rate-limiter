@@ -16,19 +16,22 @@ class WindowDecision:
 
 
 def consume_window(
-    state: WindowState, limit: int, window: float, now: float
+    state: WindowState, limit: int, window: float, now: float, cost: int = 1
 ) -> WindowDecision:
+    if cost > limit:
+        raise ValueError("cost exceeds the window limit")
     cutoff = now - window
     recent = tuple(t for t in state.timestamps if t > cutoff)
 
-    if len(recent) < limit:
-        recent = recent + (now,)
+    if len(recent) + cost <= limit:
+        recent = recent + (now,) * cost
         allowed = True
         retry_after = 0.0
     else:
         allowed = False
-        # the oldest request leaves the window at recent[0] + window
-        retry_after = recent[0] + window - now
+        # this many of the oldest requests must leave the window first
+        needed = len(recent) + cost - limit
+        retry_after = recent[needed - 1] + window - now
 
     return WindowDecision(
         allowed=allowed,
