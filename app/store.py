@@ -9,6 +9,7 @@ from app.client_config import ClientConfig
 
 DEFAULT_RATE = 5.0   # tokens per second
 DEFAULT_BURST = 10   # bucket capacity
+LOCK_STRIPES = 256   # size of the shared lock pool
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -24,17 +25,16 @@ class InMemoryBucketStore:
         self._buckets: dict[str, BucketState] = {}
         self._windows: dict[str, WindowState] = {}
         self._configs: dict[str, ClientConfig] = {}
-        self._key_locks: dict[str, threading.Lock] = {}
+        self._stripes = [threading.Lock() for _ in range(LOCK_STRIPES)]
         # _guard protects the dictionaries above. It is held only for
         # microseconds, and never while calling the database.
         self._guard = threading.Lock()
 
     def _key_lock(self, client_key: str) -> threading.Lock:
-        with self._guard:
-            lock = self._key_locks.get(client_key)
-            if lock is None:
-                lock = self._key_locks[client_key] = threading.Lock()
-            return lock
+        # A fixed pool of locks shared by all keys ("lock striping"). Two keys may
+        # occasionally share a lock, which is harmless, and no lock object ever has
+        # to be created or deleted per client.
+        return self._stripes[hash(client_key) % LOCK_STRIPES]
 
     def _get_config(self, client_key: str) -> ClientConfig:
         with self._guard:
