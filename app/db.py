@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS bucket_state (
     last_refill DOUBLE PRECISION NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE client_config
+    ADD COLUMN IF NOT EXISTS algorithm TEXT NOT NULL DEFAULT 'token_bucket'
+    CHECK (algorithm IN ('token_bucket', 'sliding_window'));
 """
 
 

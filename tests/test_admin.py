@@ -1,7 +1,12 @@
 def test_set_and_get_config(client):
     r = client.put("/admin/clients/admin-test-a", json={"rate": 2, "burst": 3})
     assert r.status_code == 200
-    assert r.json() == {"client_key": "admin-test-a", "rate": 2.0, "burst": 3}
+    assert r.json() == {
+        "client_key": "admin-test-a",
+        "rate": 2.0,
+        "burst": 3,
+        "algorithm": "token_bucket",
+    }
 
     r = client.get("/admin/clients/admin-test-a")
     assert r.status_code == 200
@@ -31,3 +36,22 @@ def test_delete_config(client):
     assert client.delete("/admin/clients/admin-test-d").status_code == 204
     assert client.get("/admin/clients/admin-test-d").status_code == 404
     assert client.delete("/admin/clients/admin-test-d").status_code == 404
+
+def test_algorithm_defaults_to_token_bucket_and_can_be_changed(client):
+    r = client.put("/admin/clients/admin-test-e", json={"rate": 1, "burst": 3})
+    assert r.json()["algorithm"] == "token_bucket"
+
+    r = client.put(
+        "/admin/clients/admin-test-e",
+        json={"rate": 1, "burst": 3, "algorithm": "sliding_window"},
+    )
+    assert r.json()["algorithm"] == "sliding_window"
+    assert client.get("/admin/clients/admin-test-e").json()["algorithm"] == "sliding_window"
+
+
+def test_unknown_algorithm_is_rejected(client):
+    r = client.put(
+        "/admin/clients/admin-test-f",
+        json={"rate": 1, "burst": 3, "algorithm": "leaky_bucket"},
+    )
+    assert r.status_code == 422
