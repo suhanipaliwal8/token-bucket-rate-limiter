@@ -5,6 +5,8 @@ from dotenv import dotenv_values
 
 # Must run BEFORE the app is imported, so tests use the test database.
 os.environ["DATABASE_URL"] = dotenv_values(".env")["TEST_DATABASE_URL"]
+TEST_ADMIN_KEY = "test-admin-key-0123456789"
+os.environ["ADMIN_API_KEY"] = TEST_ADMIN_KEY
 
 from fastapi.testclient import TestClient  # noqa: E402
 
