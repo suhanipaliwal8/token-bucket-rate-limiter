@@ -15,6 +15,10 @@
 </head>
 <body>
 <h1>Rate limiter: live traffic</h1>
+<div style="margin-bottom: 1rem;">
+  <input id="key" type="password" placeholder="Admin API key" size="40">
+  <button onclick="saveKey()">Use key</button>
+</div>
 <div id="status">loading...</div>
 <table>
   <thead><tr>
@@ -31,10 +35,23 @@ function cell(tr, text) {
   return td;
 }
 
+function saveKey() {
+  // sessionStorage is cleared when the tab closes; never put a key in the URL
+  sessionStorage.setItem("adminKey", document.getElementById("key").value);
+  document.getElementById("key").value = "";
+  refresh();
+}
+
 async function refresh() {
   const status = document.getElementById("status");
   try {
-    const res = await fetch("/admin/metrics");
+    const res = await fetch("/admin/metrics", {
+      headers: { "X-API-Key": sessionStorage.getItem("adminKey") || "" },
+    });
+    if (res.status === 401) {
+      status.textContent = "enter the admin API key above";
+      return;
+    }
     const data = await res.json();
     const tbody = document.getElementById("rows");
     tbody.replaceChildren();
@@ -57,7 +74,8 @@ async function refresh() {
     status.textContent = data.tracked_clients + " clients active in the last " +
       data.window_seconds + " s, updated " + new Date().toLocaleTimeString();
   } catch (e) {
-    status.textContent = "cannot reach the server";
+    console.error(e);  // keep the real error visible in the browser console
+    status.textContent = "error: " + e.message;
   }
 }
 setInterval(refresh, 1000);
