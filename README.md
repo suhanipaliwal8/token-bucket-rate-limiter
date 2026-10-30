@@ -1,5 +1,7 @@
 # Token Bucket Rate Limiter Service
 
+[![CI](https://github.com/suhanipaliwal8/token-bucket-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/suhanipaliwal8/token-bucket-rate-limiter/actions/workflows/ci.yml)
+
 A standalone HTTP service that other services call to ask: "is this client allowed to make a request right now?" It supports two algorithms (token bucket and sliding window) selectable per client, keeps its state across restarts, and stays correct under concurrent load.
 
 ## Features
@@ -12,6 +14,7 @@ A standalone HTTP service that other services call to ask: "is this client allow
 - Idle clients are evicted from memory and the database without ever changing a decision
 - Live dashboard at `/dashboard` with per-client request and deny rates
 - Runs with one command using Docker Compose
+- Tests and a Docker build run automatically on every pull request
 - Load-tested above 500 requests/second with automatic correctness checks
 
 ## Architecture
@@ -146,7 +149,16 @@ Interactive API docs: http://127.0.0.1:8000/docs
 pytest -v
 ```
 
-64 tests cover the algorithms, the HTTP API, authentication, concurrent access (threads with an artificially widened race window), snapshot save/restore, eviction, request cost, the headers, and the metrics. Tests run against the separate `ratelimiter_test` database.
+64 tests cover the algorithms, the HTTP API, authentication, concurrent access (threads with an artificially widened race window), snapshot save/restore, eviction, request cost, the headers, and the metrics. Tests run against the separate `ratelimiter_test` database (taken from `TEST_DATABASE_URL`, either in the environment or in `.env`).
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on every push to `main`:
+
+- **test:** starts a PostgreSQL service container, installs `requirements-dev.txt` on Python 3.12, and runs the full test suite
+- **docker-build:** builds the Docker image, so the Dockerfile cannot silently break
+
+The workflow has read-only repository permissions and cancels superseded runs. The CI database password is not a secret: the database only exists while the job runs.
 
 ## Design decisions
 
@@ -174,6 +186,7 @@ app/
   static/        dashboard.html
 tests/           unit, API, concurrency, snapshot, eviction, auth and dashboard tests
 loadtest/        Locust load test with correctness checks
+.github/workflows/ci.yml
 Dockerfile, docker-compose.yml, .dockerignore
 requirements.txt (runtime), requirements-dev.txt (tests), requirements-loadtest.txt
 ```
@@ -233,5 +246,4 @@ I also validated the test itself: removing the per-key lock (with a widened race
 
 ## Roadmap
 
-- GitHub Actions to run the tests on every pull request
 - Distributed mode: several limiter instances sharing state
