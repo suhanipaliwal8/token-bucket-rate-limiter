@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import FastAPI, HTTPException, Response, status, Depends
 from fastapi.responses import FileResponse
 
 from app import client_config, snapshots
+from app.auth import require_admin_key
 from app.db import close_db, init_db
 from app.errors import CostExceedsLimit
 from app.headers import rate_limit_headers
@@ -59,7 +60,11 @@ def check(body: CheckRequest, response: Response):
     )
 
 
-@app.put("/admin/clients/{client_key}", response_model=ClientConfigOut)
+@app.put(
+    "/admin/clients/{client_key}",
+    response_model=ClientConfigOut,
+    dependencies=[Depends(require_admin_key)],
+)
 def set_client_config(client_key: str, body: ClientConfigIn):
     cfg = client_config.upsert(client_key, body.rate, body.burst, body.algorithm)
     store.set_config(cfg)
@@ -71,7 +76,11 @@ def set_client_config(client_key: str, body: ClientConfigIn):
     )
 
 
-@app.get("/admin/clients/{client_key}", response_model=ClientConfigOut)
+@app.get(
+    "/admin/clients/{client_key}",
+    response_model=ClientConfigOut,
+    dependencies=[Depends(require_admin_key)],
+)
 def get_client_config(client_key: str):
     cfg = client_config.get(client_key)
     if cfg is None:
@@ -86,7 +95,11 @@ def get_client_config(client_key: str):
     )
 
 
-@app.delete("/admin/clients/{client_key}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete(
+    "/admin/clients/{client_key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin_key)],
+)
 def delete_client_config(client_key: str):
     if not client_config.delete(client_key):
         raise HTTPException(
@@ -95,7 +108,7 @@ def delete_client_config(client_key: str):
     store.remove_config(client_key)
 
 
-@app.get("/admin/metrics")
+@app.get("/admin/metrics", dependencies=[Depends(require_admin_key)])
 def get_metrics():
     return metrics.snapshot()
 

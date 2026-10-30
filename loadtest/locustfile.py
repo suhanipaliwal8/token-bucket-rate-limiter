@@ -8,8 +8,10 @@ Run from the project root (server must be running):
 import math
 import random
 import time
+import os
 
 import requests
+from dotenv import dotenv_values
 from locust import HttpUser, constant, events, task
 
 RUN_ID = int(time.time())  # new keys every run, so earlier runs can't interfere
@@ -18,6 +20,8 @@ SW_KEY = f"load-sw-{RUN_ID}"
 RATE = 50    # tokens per second
 BURST = 100  # bucket capacity / sliding-window limit (window = BURST / RATE = 2 s)
 TARGET_RPS = 500
+ADMIN_KEY = os.environ.get("ADMIN_API_KEY") or dotenv_values(".env").get("ADMIN_API_KEY", "")
+ADMIN_HEADERS = {"X-API-Key": ADMIN_KEY}
 
 
 class Tally:
@@ -97,6 +101,7 @@ def configure_clients(environment, **kwargs):
             f"{environment.host}/admin/clients/{key}",
             json={"rate": RATE, "burst": BURST, "algorithm": algorithm},
             timeout=10,
+            headers=ADMIN_HEADERS,
         )
         r.raise_for_status()
 
@@ -162,4 +167,4 @@ def verify_correctness(environment, **kwargs):
         environment.process_exit_code = 1
 
     for key in (TB_KEY, SW_KEY):  # clean up the configs this run created
-        requests.delete(f"{environment.host}/admin/clients/{key}", timeout=10)
+        requests.delete(f"{environment.host}/admin/clients/{key}", timeout=10, headers=ADMIN_HEADERS)
