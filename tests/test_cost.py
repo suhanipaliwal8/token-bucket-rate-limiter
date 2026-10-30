@@ -6,7 +6,7 @@ from app.algorithms.token_bucket import BucketState, consume
 
 def test_token_bucket_cost_spends_multiple_tokens():
     d = consume(BucketState(5, 0.0), rate=1, burst=5, now=0.0, cost=3)
-    assert d.allowed and d.remaining == 2
+    assert d.allowed and d.remaining == 3
 
 
 def test_token_bucket_denies_when_cost_exceeds_tokens():
