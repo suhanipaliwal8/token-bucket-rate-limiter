@@ -11,6 +11,7 @@ A standalone HTTP service that other services call to ask: "is this client allow
 - Standard rate-limit headers on every `/check` response
 - Idle clients are evicted from memory and the database without ever changing a decision
 - Live dashboard at `/dashboard` with per-client request and deny rates
+- Runs with one command using Docker Compose
 - Load-tested above 500 requests/second with automatic correctness checks
 
 ## Architecture
@@ -102,44 +103,33 @@ The admin endpoints (`/admin/...`) require a secret key in the `X-API-Key` heade
 
 ## Dashboard
 
-Open `http://127.0.0.1:8000/dashboard`, paste the admin API key and click **Use key**. The page refreshes every second and shows, for the busiest clients: requests per second and denied requests per second over the last 10 seconds, allowed and denied totals over the last 60 seconds, and a deny-rate bar.
+Open `/dashboard`, paste the admin API key and click **Use key**. The page refreshes every second and shows, for the busiest clients: requests per second and denied requests per second over the last 10 seconds, allowed and denied totals over the last 60 seconds, and a deny-rate bar.
 
 The key is kept in the browser tab's `sessionStorage` (cleared when the tab closes) and is sent as a header, never in the URL. Client keys are shown with `textContent`, never as HTML, because they are untrusted text.
 
-## Design decisions
+## Run with Docker
 
-- **In-memory hot path with periodic snapshots** instead of a database write per request: fast, at the cost of losing up to 5 seconds of state on a hard crash.
-- **Pure algorithm functions** (state in, new state out, current time passed in): easy to test without sleeping.
-- **Striped locks:** a fixed pool of 256 locks, chosen by a hash of the client key, makes read-compute-write atomic per client without per-client lock objects to leak. A short guard lock protects the shared dictionaries and is never held during a database call.
-- **Idle-client eviction:** a background pass removes a client's state once it is identical to a new client's state (bucket fully refilled, or window empty), so eviction never changes a decision. It uses compare-and-delete, so state updated mid-sweep is skipped.
-- **Wall-clock timestamps** are stored so that downtime counts as refill time after a restart.
-- **DENY is HTTP 429**; both algorithms return the same result shape and headers.
-- **Fail-closed admin key:** no default key, and the service will not start without one.
-- **Single process:** locks and state are per-process, so run one uvicorn worker.
+The quickest way: Docker Compose starts the service and its PostgreSQL database together.
 
-## Project structure
-
-```
-app/
-  algorithms/    token_bucket.py, sliding_window.py, idle.py (pure functions)
-  main.py        HTTP routes and startup/shutdown
-  store.py       in-memory state, striped locking, algorithm dispatch, eviction
-  snapshots.py   background worker: snapshots, restore, eviction
-  auth.py        admin API key check
-  metrics.py     rolling per-client traffic counters
-  errors.py, client_config.py, db.py, config.py, schemas.py, headers.py
-  static/        dashboard.html
-tests/           unit, API, concurrency, snapshot, eviction, auth and dashboard tests
-loadtest/        Locust load test with correctness checks
+```bash
+cp .env.example .env     # then fill in ADMIN_API_KEY and POSTGRES_PASSWORD
+docker compose up --build
 ```
 
-## Run it locally
+The service is then available at http://127.0.0.1:8080 (docs at `/docs`, dashboard at `/dashboard`).
+
+- Stop it with `Ctrl+C` or `docker compose stop`: the service shuts down gracefully and saves its state first
+- Data lives in the `pgdata` Docker volume, so it survives `docker compose down`; use `docker compose down -v` to delete it
+- Config comes from environment variables; nothing secret is baked into the image (`.env` is excluded from the build)
+- The container runs as a non-root user with a single uvicorn worker and a built-in health check
+
+## Run locally (without Docker)
 
 ```bash
 python -m venv venv
 source venv/Scripts/activate        # Windows Git Bash; on macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env                # then fill in your PostgreSQL password and ADMIN_API_KEY
+pip install -r requirements-dev.txt
+cp .env.example .env                # then fill in DATABASE_URL, TEST_DATABASE_URL and ADMIN_API_KEY
 ```
 
 Create two PostgreSQL databases, `ratelimiter` and `ratelimiter_test`, then:
@@ -157,6 +147,36 @@ pytest -v
 ```
 
 64 tests cover the algorithms, the HTTP API, authentication, concurrent access (threads with an artificially widened race window), snapshot save/restore, eviction, request cost, the headers, and the metrics. Tests run against the separate `ratelimiter_test` database.
+
+## Design decisions
+
+- **In-memory hot path with periodic snapshots** instead of a database write per request: fast, at the cost of losing up to 5 seconds of state on a hard crash.
+- **Pure algorithm functions** (state in, new state out, current time passed in): easy to test without sleeping.
+- **Striped locks:** a fixed pool of 256 locks, chosen by a hash of the client key, makes read-compute-write atomic per client without per-client lock objects to leak. A short guard lock protects the shared dictionaries and is never held during a database call.
+- **Idle-client eviction:** a background pass removes a client's state once it is identical to a new client's state (bucket fully refilled, or window empty), so eviction never changes a decision. It uses compare-and-delete, so state updated mid-sweep is skipped.
+- **Wall-clock timestamps** are stored so that downtime counts as refill time after a restart.
+- **DENY is HTTP 429**; both algorithms return the same result shape and headers.
+- **Fail-closed admin key:** no default key, and the service will not start without one.
+- **Graceful shutdown in containers:** uvicorn runs as the container's main process (exec-form `CMD`), so Docker's `SIGTERM` triggers the final snapshot.
+- **Single process:** locks and state are per-process, so run one uvicorn worker.
+
+## Project structure
+
+```
+app/
+  algorithms/    token_bucket.py, sliding_window.py, idle.py (pure functions)
+  main.py        HTTP routes and startup/shutdown
+  store.py       in-memory state, striped locking, algorithm dispatch, eviction
+  snapshots.py   background worker: snapshots, restore, eviction
+  auth.py        admin API key check
+  metrics.py     rolling per-client traffic counters
+  errors.py, client_config.py, db.py, config.py, schemas.py, headers.py
+  static/        dashboard.html
+tests/           unit, API, concurrency, snapshot, eviction, auth and dashboard tests
+loadtest/        Locust load test with correctness checks
+Dockerfile, docker-compose.yml, .dockerignore
+requirements.txt (runtime), requirements-dev.txt (tests), requirements-loadtest.txt
+```
 
 ## Load test
 
@@ -209,9 +229,9 @@ I also validated the test itself: removing the per-key lock (with a widened race
 - The admin key travels in a header, so serve the API over HTTPS (TLS termination in front of it) in any real deployment; changing the key requires a restart
 - Single process only; multiple instances would each have their own state
 - Sliding-window memory and per-request work grow with `burst`
+- Dependencies are not pinned to exact versions yet
 
 ## Roadmap
 
-- Dockerfile and Docker Compose to run the service with PostgreSQL
 - GitHub Actions to run the tests on every pull request
 - Distributed mode: several limiter instances sharing state
