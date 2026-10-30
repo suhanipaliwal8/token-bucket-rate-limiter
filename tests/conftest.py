@@ -4,7 +4,10 @@ import pytest
 from dotenv import dotenv_values
 
 # Must run BEFORE the app is imported, so tests use the test database and a known key.
-os.environ["DATABASE_URL"] = dotenv_values(".env")["TEST_DATABASE_URL"]
+# CI provides TEST_DATABASE_URL directly; locally it comes from .env.
+os.environ["DATABASE_URL"] = (
+    os.environ.get("TEST_DATABASE_URL") or dotenv_values(".env")["TEST_DATABASE_URL"]
+)
 TEST_ADMIN_KEY = "test-admin-key-0123456789"
 os.environ["ADMIN_API_KEY"] = TEST_ADMIN_KEY
 
